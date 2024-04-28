@@ -1,1 +1,378 @@
+/*
+ * ******************************
+ * * AUTOMATIC COMPONENT QUOTAS *
+ * ******************************
+ *         
+ * SETUP:
+ * -----------------------------------------------------------------------
+ * 
+ * The script requires an assembler marked with the "ASSEMBLER_TAG" from the CONFIGURATION section.
+ * If multiple assemblers are marked with the tag, the first one found will be controlled.
+ * The production queue of all assemblers in the current grid will be monitored so that multiple assemblers can be set up in cooperative mode, speeding up the production.
+ * 
+ * Current quotas, component count, and status can be monitored by setting up an LCD with the configured "LCD_TAG".
+ * This LCD should preferably be of the type "Wide LCD Panel" or bigger, as I've yet to figure out how to dynamically scale the output.
+ * The output kind of works on normal LCD panels, but some information will be cut off.
+ * 
+ * The quotas themselves are adjusted using the values under the section QUOTAS.
+ * Altering the name of a quota will probably break it, but modded components can be monitored provided you know the blueprint-name of the component.
+ * If a quota exists for a component that cannot be produced, it will be shown in the output of the programmable block.
+ * 
+ * USAGE:
+ * -----------------------------------------------------------------------
+ * 
+ * The script defaults to "Monitoring" mode, where no components are produced.
+ * To enter "Production" mode, either:
+ *     1. Set the "ALWAYS_PRODUCE" bool in the CONFIGURATION section to "true"
+ *     2. Run the script with argument "produce"
+ *     3. Create a button that runs the script with argument "produce"
+ * 
+ * Sending any other argument than "produce" will set the script back to "Monitoring".
+ */
+
+/*
+CONFIGURATION
+-----------------------------------------------------------------------
+*/Dictionary<string, string> defaultCustomData = new Dictionary<string, string>()
+{
+    { "ASSEMBLER_TAG", "Quota Assembler" },
+    { "LCD_TAG", "Quota LCD" },
+    { "ALWAYS_PRODUCE", "false" },
+    // custom data for component quotas here
+    { "Construction", "0" },
+    { "MetalGrid", "0" },
+    { "InteriorPlate", "0" },
+    { "SteelPlate", "0" },
+    { "Girder", "0" },
+    { "SmallTube", "0" },
+    { "LargeTube", "0" },
+    { "Motor", "0" },
+    { "Display", "0" },
+    { "BulletproofGlass", "0" },
+    { "Computer", "0" },
+    { "Reactor", "0" },
+    { "Thrust", "0" },
+    { "GravityGenerator", "0" },
+    { "Medical", "0" },
+    { "RadioCommunication", "0" },
+    { "Detector", "0" },
+    { "Explosives", "0" },
+    { "SolarCell", "0" },
+    { "PowerCell", "0" },
+    { "Superconductor", "0" },
+    { "Canvas", "0" }
+};
+
+string channel;
+
+/*
+PROGRAM
+-----------------------------------------------------------------------
+*/
+string ASSEMBLER_TAG;
+string LCD_TAG;
+bool ALWAYS_PRODUCE;
+
+ComponentQuota[] quotas;
+
+public Program()
+{
+    this.Runtime.UpdateFrequency = UpdateFrequency.Update100;
+    ASSEMBLER_TAG = GetCustomDataDictionary(defaultCustomData)["ASSEMBLER_TAG"];
+    LCD_TAG = GetCustomDataDictionary(defaultCustomData)["LCD_TAG"];
+    ALWAYS_PRODUCE = bool.Parse(GetCustomDataDictionary(defaultCustomData)["ALWAYS_PRODUCE"]);
+    this.arg = this.Storage;
+    UpdateQuotasFromConfig(GetCustomDataDictionary(defaultCustomData));
+}
+
+public void Save()
+{
+    this.Storage = this.arg;
+}
+
+public void Main(string argument)
+{
+    if (!String.IsNullOrEmpty(argument))
+    {
+        this.arg = argument.ToLower();
+        this.Save();
+    }
+
+    if (!this.ReadyToRun()) return;
+
+    this.WriteStatus();
+
+    for (int i = 0; i < this.quotas.Length; i++)
+    {
+        try
+        {
+            this.CheckComponentQuota(this.quotas[i]);
+        }
+        catch (Exception e)
+        {
+            this.Echo(e.Message);
+            this.forceReload = true;
+            break;
+        }
+    }
+
+    // Update now if an error was detected.
+    if (this.forceReload)
+    {
+        this.Runtime.UpdateFrequency = UpdateFrequency.Update1;
+    }
+    else if (this.Runtime.UpdateFrequency != UpdateFrequency.Update100)
+    {
+        this.Runtime.UpdateFrequency = UpdateFrequency.Update100;
+    }
+}
+
+void WriteStatus()
+{
+    if (this.Produce)
+    {
+        this.Write($"Producing{Environment.NewLine}", false);
+    }
+    else
+    {
+        this.Write($"Monitoring{Environment.NewLine}", false);
+    }
+}
+
+// Verifies that we have everything we need to run.
+bool ReadyToRun()
+{
+    // Only update every 5 seconds if we have found an assembler to use.
+    if (this.assembler != null &&
+        DateTime.UtcNow - this.lastScan < TimeSpan.FromSeconds(5) &&
+        !this.forceReload)
+    {
+        return true;
+    }
+    this.forceReload = false;
+
+    // Find all displays with the LCD_TAG on our grid.
+    this.GridTerminalSystem.GetBlocksOfType(this.displays, (a) => a.IsSameConstructAs(this.Me) && a.CustomName.Contains(LCD_TAG));
+    for (int i = 0; i < this.displays.Count; i++)
+    {
+        this.displays[i].ContentType = ContentType.TEXT_AND_IMAGE;
+        this.displays[i].Alignment = TextAlignment.LEFT;
+        this.displays[i].Font = "Monospace";
+        this.displays[i].FontSize = 0.8f;
+    }
+    if (this.displays.Count > 0)
+    {
+        this.Write(Environment.NewLine, false);
+    }
+
+    // Fetch inventories and assemblers on our grid.
+    this.GridTerminalSystem.GetBlocksOfType(this.cargos, (a) => a.IsSameConstructAs(this.Me) && a.HasInventory);
+    this.GridTerminalSystem.GetBlocksOfType(this.assemblers, (a) => a.IsSameConstructAs(this.Me));
+
+    this.assembler = this.assemblers
+        .Where(a => a.CustomName.Contains(ASSEMBLER_TAG))
+        .FirstOrDefault();
+
+    if (this.assembler == null)
+    {
+        this.Write($"Unable to find assembler with tag \"{ASSEMBLER_TAG}\"");
+        return false;
+    }
+
+    string text = "";
+    for (int i = 0; i < this.cargos.Count; i++)
+    {
+        text = this.cargos[i].CustomName;
+        text += this.cargos[i].IsFunctional ? "" : " (Incomplete)";
+        this.Echo(text);
+    }
+
+    this.lastScan = DateTime.UtcNow;
+    return true;
+}
+
+// Check the number of components available against the provided quota, and add the difference to the assembler queue.
+void CheckComponentQuota(ComponentQuota componentQuota)
+{
+    string log = $"{componentQuota.ComponentType,-20}";
+    MyItemType componentName = new MyItemType("MyObjectBuilder_Component", componentQuota.ComponentType);
+    int queuedCount, componentCount;
+    this.GetComponentCount(componentName, out queuedCount, out componentCount);
+    int componentsToAdd = componentQuota.Count - (queuedCount + componentCount);
+
+    if (this.Produce)
+    {
+        log += $"Count: {componentCount,-8} / {componentQuota.Count,-8}";
+    }
+    else
+    {
+        log += $"Count: {componentCount,-19}";
+    }
+
+    if (componentsToAdd > 0 && this.Produce)
+    {
+        this.QueueComponents(componentName, componentsToAdd);
+        log += $"Queued: {queuedCount + componentsToAdd,-8}";
+    }
+    else
+    {
+        log += $"Queued: {queuedCount,-8}";
+    }
+    this.Write(log);
+}
+
+// Searches all cargo containers and assemblers for the given component. Will also search assembler queues.
+void GetComponentCount(MyItemType component, out int queued, out int count)
+{
+    queued = 0;
+    count = 0;
+
+    List<MyProductionItem> productionQueue = new List<MyProductionItem>();
+    foreach (IMyProductionBlock assembler in this.assemblers)
+    {
+        count += assembler.OutputInventory.GetItemAmount(component).ToIntSafe();
+        assembler.GetQueue(productionQueue);
+        foreach (MyProductionItem queuedItem in productionQueue)
+        {
+            if (queuedItem.BlueprintId.ToString().Contains(component.SubtypeId))
+            {
+                queued += queuedItem.Amount.ToIntSafe();
+            }
+        }
+    }
+
+    foreach (IMyTerminalBlock cargo in this.cargos)
+    {
+        count += cargo.GetInventory().GetItemAmount(component).ToIntSafe();
+    }
+}
+
+// Performs the actual queueing of components.
+void QueueComponents(MyItemType component, int number)
+{
+    MyDefinitionId blueprint = MyDefinitionId.Parse("MyObjectBuilder_BlueprintDefinition/" + this.ComponentToBlueprint(component));
+    if (!this.assembler.CanUseBlueprint(blueprint))
+    {
+        this.Echo($"Unable to produce {component.SubtypeId}.");
+    }
+    else
+    {
+        this.assembler.AddQueueItem(blueprint, (decimal)number);
+    }
+}
+
+// Some components require "Component" appended to work as assembler blueprints.
+// This methods adds that where necessary.
+string ComponentToBlueprint(MyItemType component)
+{
+    switch (component.SubtypeId)
+    {
+        case "Computer":
+        case "Construction":
+        case "Detector":
+        case "Explosives":
+        case "Girder":
+        case "GravityGenerator":
+        case "Medical":
+        case "Motor":
+        case "RadioCommunication":
+        case "Reactor":
+        case "Thrust":
+            return component.SubtypeId + "Component";
+
+        default:
+            return component.SubtypeId;
+
+    }
+}
+
+// Writes output to any configured displays.
+void Write(string text, bool append = true)
+{
+    text += Environment.NewLine;
+    if (this.displays.Count > 0)
+    {
+        // Write to our display(s).
+        for (int i = 0; i < this.displays.Count; i++)
+        {
+            this.displays[i].WriteText(text, append);
+        }
+    }
+    else
+    {
+        // If no displays are configured, write to output instead.
+        this.Echo(text);
+    }
+}
+
+bool Produce => this.arg == "produce" || ALWAYS_PRODUCE;
+
+class ComponentQuota
+{
+    public ComponentQuota(string componentType, int count)
+    {
+        this.ComponentType = componentType;
+        this.Count = count;
+    }
+
+    public string ComponentType { get; }
+
+    public int Count { get; }
+}
+
+Dictionary<string, string> GetCustomDataDictionary(Dictionary<string, string> defaultData)
+{
+    Dictionary<string, string> customDataDictionary = new Dictionary<string, string>();
+    string customData = Me.CustomData.Trim();
+
+    // check if custom data is empty
+    if (string.IsNullOrEmpty(customData))
+    {
+        // set default custom data (default) if it's empty
+        foreach (var entry in defaultData)
+        {
+            Me.CustomData += entry.Key + "=" + entry.Value + ";\n";
+            customDataDictionary.Add(entry.Key, entry.Value);
+        }
+    }
+    else
+    {
+        // pulling data from custom data and putting it into a dictionary
+        string[] dataEntries = customData.Split(new string[] { ";\n", ";" }, StringSplitOptions.RemoveEmptyEntries); // split by ';'
+        foreach (string entry in dataEntries)
+        {
+            string[] keyValue = entry.Split('='); // split by '='
+            if (keyValue.Length == 2) // check if everything was split correctly (only 2 values can be present)
+            {
+                customDataDictionary[keyValue[0]] = keyValue[1];
+            }
+        }
+    }
+
+    return customDataDictionary;
+}
+
+readonly List<IMyTerminalBlock> cargos = new List<IMyTerminalBlock>();
+readonly List<IMyProductionBlock> assemblers = new List<IMyProductionBlock>();
+readonly List<IMyTextPanel> displays = new List<IMyTextPanel>();
+
+IMyProductionBlock assembler;
+DateTime lastScan = DateTime.UtcNow;
+string arg;
+bool forceReload;
+
+void UpdateQuotasFromConfig(Dictionary<string, string> customData)
+{
+    List<ComponentQuota> newQuotas = new List<ComponentQuota>();
+
+    foreach (var kvp in customData)
+    {
+        if (kvp.Key != "ASSEMBLER_TAG" && kvp.Key != "LCD_TAG" && kvp.Key != "ALWAYS_PRODUCE")
+        {
+            newQuotas.Add(new ComponentQuota(kvp.Key, int.Parse(kvp.Value)));
+        }
+    }
+
+    quotas = newQuotas.ToArray();
+}
 
