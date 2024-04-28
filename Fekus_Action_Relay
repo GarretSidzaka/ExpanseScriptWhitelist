@@ -1,1 +1,118 @@
+/*
+         ==================== Setup ====================
+        If needed you can set the channel in the programmable blocks Custom Data (you can communicate with other programmable blocks within the same channel)
 
+        !!!!!!!!!!Remember to recompile the script every time you change something in Cutom Data!!!!!!!!!!
+
+
+        Antennas must have enabled broadcasting so they can communicate
+        The script will trigger the timer block with recieved name, communication works both ways
+
+        Examples:
+        -If you want your reciever to trigger "Timer Block 18" just run the transmitter with argument "Timer Block 18"
+        -If you want your reciever to trigger "Timer Block - Hangar doors" just run the transmitter with argument "Timer Block - Hangar doors" and so on
+
+        feel free to modify and/or implement my scripts in your builds/scripts, just paste link to the original script in the description
+        */
+        //  ==================== END ====================
+
+
+
+        Dictionary<string, string> defaultCustomData = new Dictionary<string, string>()
+        {
+            { "channel", "zaq1@WSX" }
+        };
+        string channel;
+        IMyBroadcastListener myListener;
+
+        public Program()
+        {
+            Echo("Script has been initialized");
+            channel = GetCustomDataDictionary(defaultCustomData)["channel"];
+            myListener = IGC.RegisterBroadcastListener(channel);
+            myListener.SetMessageCallback("Acknowledged");
+        }
+
+        public void Main(string arg, UpdateType updateSource)
+        {
+            Echo("Script is running due to:" + updateSource.ToString());
+
+            if (updateSource != UpdateType.IGC)
+            {
+                if (arg != "")
+                {
+                    Transmit(arg, channel);
+                }
+            }
+            else
+            {
+                while (myListener.HasPendingMessage)
+                {
+                    string message = Recieve(channel);
+                    Timer_Trigger(message);
+                }
+            }
+        }
+
+        public void Transmit(string message, string channel)
+        {
+            IGC.SendBroadcastMessage(channel, message);
+            Echo("Sending message: " + message + "\nOn channel: " + channel);
+        }
+
+        public string Recieve(string channel)
+        {
+            MyIGCMessage myMessage = myListener.AcceptMessage();
+            if (myMessage.Data is string)
+            {
+                string str = myMessage.Data.ToString();
+                return str;
+            }
+            else
+            {
+                Echo("Non-string data received, discarding message.");
+                return "Non-String data";
+            }
+        }
+
+        public void Timer_Trigger(string timer_name)
+        {
+            IMyTimerBlock timer = GridTerminalSystem.GetBlockWithName(timer_name) as IMyTimerBlock;
+            if (timer != null)
+            {
+                Echo("Message from " + channel + " is: " + timer_name + "\nFiring named timer: " + timer_name);
+                timer.ApplyAction("TriggerNow");
+            }
+        }
+
+        Dictionary<string, string> GetCustomDataDictionary(Dictionary<string, string> defaultData)
+        {
+            Dictionary<string, string> customDataDictionary = new Dictionary<string, string>();
+            string customData = Me.CustomData.Trim();
+
+            // check if custom data is empty
+            if (string.IsNullOrEmpty(customData))
+            {
+                // set default custom data (defaut) if it's empty
+                foreach (var entry in defaultData)
+                {
+                    Me.CustomData += entry.Key + "=" + entry.Value + ";";
+                    customDataDictionary.Add(entry.Key, entry.Value);
+                }
+            }
+            else
+            {
+                // pulling data from custom data and putting it into a dictionary
+                string[] dataEntries = customData.Split(';'); //split by ';'
+                foreach (string entry in dataEntries)
+                {
+                    string[] keyValue = entry.Split('='); //split by '='
+                    if (keyValue.Length == 2) //check if everything was splitted correctly (only 2 values can be present)
+                    {
+                        customDataDictionary[keyValue[0]] = keyValue[1];
+                    }
+                }
+            }
+
+            return customDataDictionary;
+        }
