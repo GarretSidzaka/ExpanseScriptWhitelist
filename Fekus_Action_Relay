@@ -2,7 +2,7 @@
          ==================== Setup ====================
         If needed you can set the channel in the programmable blocks Custom Data (you can communicate with other programmable blocks within the same channel)
 
-        !!!!!!!!!!Remember to recompile the script every time you change something in Cutom Data!!!!!!!!!!
+        !!!!!!!!!!Remember to recompile the script every time you change something in Custom Data!!!!!!!!!!
 
 
         Antennas must have enabled broadcasting so they can communicate
@@ -13,6 +13,8 @@
         -If you want your reciever to trigger "Timer Block - Hangar doors" just run the transmitter with argument "Timer Block - Hangar doors" and so on
 
         feel free to modify and/or implement my scripts in your builds/scripts, just paste link to the original script in the description
+         Script page: https://steamcommunity.com/sharedfiles/filedetails/?id=3170684310
+         
         */
         //  ==================== END ====================
 
