@@ -6,6 +6,8 @@
  * SETUP:
  * -----------------------------------------------------------------------
  * 
+ * All settings can be found in Custom Data (modified for Expanse Survival Gaming). Recompile the script after changes.
+ *
  * The script requires an assembler marked with the "ASSEMBLER_TAG" from the CONFIGURATION section.
  * If multiple assemblers are marked with the tag, the first one found will be controlled.
  * The production queue of all assemblers in the current grid will be monitored so that multiple assemblers can be set up in cooperative mode, speeding up the production.
@@ -28,6 +30,7 @@
  *     3. Create a button that runs the script with argument "produce"
  * 
  * Sending any other argument than "produce" will set the script back to "Monitoring".
+ * Originla script page: https://steamcommunity.com/sharedfiles/filedetails/?id=3230327774
  */
 
 /*
@@ -35,10 +38,10 @@ CONFIGURATION
 -----------------------------------------------------------------------
 */Dictionary<string, string> defaultCustomData = new Dictionary<string, string>()
 {
+    // custom data for component quotas here
     { "ASSEMBLER_TAG", "Quota Assembler" },
     { "LCD_TAG", "Quota LCD" },
     { "ALWAYS_PRODUCE", "false" },
-    // custom data for component quotas here
     { "Construction", "0" },
     { "MetalGrid", "0" },
     { "InteriorPlate", "0" },
