@@ -1,0 +1,155 @@
+/*
+ * Gravity Drive Controller Script // NO DAMPENERS
+ * 
+ * SETUP:
+ * 
+ * Add the following arguments to Custom Data:
+ * - "Up": Group name for gravity generators facing upward
+ * - "Down": Group name for gravity generators facing downward
+ * - "Left": Group name for gravity generators facing left
+ * - "Right": Group name for gravity generators facing right
+ * - "Forward": Group name for gravity generators facing forward
+ * - "Backward": Group name for gravity generators facing backward
+ * - "Strength": Strength of gravity generators (default: 100)
+ * 
+ * USAGE:
+ * 
+ * Sit in a cockpit to control your ships grav drive
+ * 
+ * Remember to compile the script after making any changes to Custom Data.
+ */
+
+
+Dictionary<string, string> DefaultCustomData = new Dictionary<string, string>()
+{
+    { "Up", "Up Gravity Gens" },
+    { "Down", "Down Gravity Gens" },
+    { "Left", "Left Gravity Gens" },
+    { "Right", "Right Gravity Gens" },
+    { "Forward", "Forward Gravity Gens" },
+    { "Backward", "Backward Gravity Gens" },
+    { "Strength", "100" }
+};
+
+void Main(string argument)
+{
+    Runtime.UpdateFrequency = UpdateFrequency.Update10;
+
+    IMyCockpit cockpit = FindCockpit();
+    if (cockpit != null && cockpit.IsUnderControl)
+    {
+        Vector3 flightInputs = cockpit.MoveIndicator;
+
+        string upGroup = GetCustomData(DefaultCustomData)["Up"];
+        string downGroup = GetCustomData(DefaultCustomData)["Down"];
+        string leftGroup = GetCustomData(DefaultCustomData)["Left"];
+        string rightGroup = GetCustomData(DefaultCustomData)["Right"];
+        string forwardGroup = GetCustomData(DefaultCustomData)["Forward"];
+        string backwardGroup = GetCustomData(DefaultCustomData)["Backward"];
+        float gravityStrength = float.Parse(GetCustomData(DefaultCustomData)["Strength"]);
+
+
+        if (flightInputs == Vector3.Zero)
+        {
+            ActivateGravityGroup(upGroup, 0f);
+            ActivateGravityGroup(downGroup, 0f);
+            ActivateGravityGroup(leftGroup, 0f);
+            ActivateGravityGroup(rightGroup, 0f);
+            ActivateGravityGroup(forwardGroup, 0f);
+            ActivateGravityGroup(backwardGroup, 0f);
+        }
+        else
+        {
+            if (flightInputs.Z < 0)
+            {
+                ActivateGravityGroup(forwardGroup, gravityStrength);
+                ActivateGravityGroup(backwardGroup, -gravityStrength);
+            }
+            else if (flightInputs.Z > 0)
+            {
+                ActivateGravityGroup(backwardGroup, gravityStrength);
+                ActivateGravityGroup(forwardGroup, -gravityStrength);
+            }
+            if (flightInputs.X > 0)
+            {
+                ActivateGravityGroup(rightGroup, gravityStrength);
+                ActivateGravityGroup(leftGroup, -gravityStrength);
+            }
+            else if (flightInputs.X < 0)
+            {
+                ActivateGravityGroup(leftGroup, gravityStrength);
+                ActivateGravityGroup(rightGroup, -gravityStrength);
+            }
+            if (flightInputs.Y > 0)
+            {
+                ActivateGravityGroup(upGroup, gravityStrength);
+                ActivateGravityGroup(downGroup, -gravityStrength);
+            }
+            else if (flightInputs.Y < 0)
+            {
+                ActivateGravityGroup(downGroup, gravityStrength);
+                ActivateGravityGroup(upGroup, -gravityStrength);
+            }
+        }
+    }
+}
+
+IMyCockpit FindCockpit()
+{
+    List<IMyCockpit> cockpits = new List<IMyCockpit>();
+    GridTerminalSystem.GetBlocksOfType<IMyCockpit>(cockpits);
+    foreach (var cockpit in cockpits)
+    {
+        if (cockpit.IsUnderControl)
+        {
+            return cockpit;
+        }
+    }
+    Echo("No cockpit found or no player in cockpit!");
+    return null;
+}
+
+void ActivateGravityGroup(string GroupName, float strengthPercentage)
+{
+    IMyBlockGroup GravityGenerators = GridTerminalSystem.GetBlockGroupWithName(GroupName);
+    if (GravityGenerators != null)
+    {
+        List<IMyGravityGeneratorBase> GravGens = new List<IMyGravityGeneratorBase>();
+        GravityGenerators.GetBlocksOfType(GravGens);
+        foreach (var generator in GravGens)
+        {
+            generator.GravityAcceleration = 9.8f * (strengthPercentage / 100f);
+        }
+    }
+    else
+    {
+        Echo($"Gravity group '{GroupName}' not found.");
+    }
+}
+
+Dictionary<string, string> GetCustomData(Dictionary<string, string> defaultData)
+{
+    Dictionary<string, string> customDataDictionary = new Dictionary<string, string>();
+    string customData = Me.CustomData.Trim();
+    if (string.IsNullOrEmpty(customData))
+    {
+        foreach (var entry in defaultData)
+        {
+            Me.CustomData += entry.Key + "=" + entry.Value + "; \n";
+            customDataDictionary.Add(entry.Key, entry.Value);
+        }
+    }
+    else
+    {
+        string[] dataEntries = customData.Split(';');
+        foreach (string entry in dataEntries)
+        {
+            string[] keyValue = entry.Split('=');
+            if (keyValue.Length == 2)
+            {
+                customDataDictionary[keyValue[0].Trim()] = keyValue[1].Trim();
+            }
+        }
+    }
+    return customDataDictionary;
+}
