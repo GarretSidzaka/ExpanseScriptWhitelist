@@ -119,6 +119,7 @@ void ActivateGravityGroup(string GroupName, float strengthPercentage)
         foreach (var generator in GravGens)
         {
             generator.GravityAcceleration = 9.8f * (strengthPercentage / 100f);
+            generator.Enabled = true;
         }
     }
     else
