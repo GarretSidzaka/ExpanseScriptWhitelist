@@ -1,5 +1,5 @@
 /*
- * Gravity Drive Controller Script // NO DAMPENERS
+ * Gravity Drive Controller Script
  * 
  * SETUP:
  * 
@@ -14,7 +14,7 @@
  * 
  * USAGE:
  * 
- * Sit in a cockpit to control your ships grav drive
+ * Sit in a cockpit to control your ship
  * 
  * Remember to compile the script after making any changes to Custom Data.
  */
@@ -70,6 +70,11 @@ void Main(string argument)
                 ActivateGravityGroup(backwardGroup, gravityStrength);
                 ActivateGravityGroup(forwardGroup, -gravityStrength);
             }
+            else
+            {
+                ActivateGravityGroup(backwardGroup, 0);
+                ActivateGravityGroup(forwardGroup, 0);
+            }
             if (flightInputs.X > 0)
             {
                 ActivateGravityGroup(rightGroup, gravityStrength);
@@ -80,6 +85,11 @@ void Main(string argument)
                 ActivateGravityGroup(leftGroup, gravityStrength);
                 ActivateGravityGroup(rightGroup, -gravityStrength);
             }
+            else
+            {
+                ActivateGravityGroup(leftGroup, 0);
+                ActivateGravityGroup(rightGroup, 0);
+            }
             if (flightInputs.Y > 0)
             {
                 ActivateGravityGroup(upGroup, gravityStrength);
@@ -89,6 +99,11 @@ void Main(string argument)
             {
                 ActivateGravityGroup(downGroup, gravityStrength);
                 ActivateGravityGroup(upGroup, -gravityStrength);
+            }
+            else
+            {
+                ActivateGravityGroup(downGroup, 0);
+                ActivateGravityGroup(upGroup, 0);
             }
         }
     }
@@ -119,7 +134,6 @@ void ActivateGravityGroup(string GroupName, float strengthPercentage)
         foreach (var generator in GravGens)
         {
             generator.GravityAcceleration = 9.8f * (strengthPercentage / 100f);
-            generator.Enabled = true;
         }
     }
     else
